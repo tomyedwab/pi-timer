@@ -1,10 +1,11 @@
 #!/usr/bin/python
 
 import datetime
-import sqlite3
 import sys
 import time
 import traceback
+
+import db
 
 class Logger(object):
     def __init__(self):
@@ -13,41 +14,11 @@ class Logger(object):
 
     def write_log(self, msg):
         self.f.write("%s: %s\n" % (datetime.datetime.now(), msg))
+        self.f.flush()
 
     def close(self):
         self.write_log("Logging ended.")
         self.f.close()
-
-
-class DB(object):
-    def __init__(self, filename):
-        self.conn = sqlite3.connect(filename)
-        
-        c = self.conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS device_history 
-                     (timestamp integer, device integer, enabled integer)''')
-        self.conn.commit()
-
-        logger.write_log("Opened Sqlite database.")
-
-    def log_device_enabled(self, device, enabled):
-        timestamp = int(time.time())
-        c = self.conn.cursor()
-        c.execute("INSERT INTO device_history VALUES (%d, %d, %d)" % (
-            timestamp, device, 1 if enabled else 0))
-        self.conn.commit()
-
-    def get_device_history(self, device, from_timestamp):
-        c = self.conn.cursor()
-        rows = c.execute(
-            '''SELECT timestamp, enabled FROM device_history
-               WHERE device = ? AND timestamp > ?''',
-            (device, from_timestamp))
-        return list(rows)
-
-    def close(self):
-        self.conn.close()
-        logger.write_log("Closed Sqlite database.")
 
 
 class DeviceIODummy(object):
@@ -164,10 +135,24 @@ class FixedScheduler(Scheduler):
         return (False, 10000)
 
 
+class DBScheduler(FixedScheduler):
+    """Works like FixedScheduler, except the schedule is stored in the DB."""
+    def __init__(self):
+        self.hour = 0
+        self.minute = 0
+        self.duration = 0
+        self.min_duration = 0
+
+    def should_enable(self, device):
+        (_, self.hour, self.minute, self.duration, self.min_duration) = (
+            db.get_device_schedule(device.identifier))
+        return super(DBScheduler, self).should_enable(device)
+
+
 # Main entry point
 logger = Logger()
 try:
-    db = DB('/var/lib/pi-timer/db.sqlite')
+    db = db.DB('/var/lib/pi-timer/db.sqlite', logger)
 except:
     logger.write_log("### Caught exception:\n%s" % traceback.format_exc())
     logger.close()
@@ -177,7 +162,7 @@ try:
     io = DeviceIODummy()
 
     devices = [
-        Device(io, 101, "Front sprinklers", 0, FixedScheduler(14, 32, 211, 60)),
+        Device(io, 101, "Front sprinklers", 0, DBScheduler()),
         Device(io, 201, "Back sprinklers bank A", 0, Scheduler()),
         Device(io, 202, "Back sprinklers bank B", 0, Scheduler())]
 
