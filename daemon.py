@@ -50,13 +50,31 @@ class DB(object):
         logger.write_log("Closed Sqlite database.")
 
 
+class DeviceIODummy(object):
+    """Dummy IO controller."""
+    def __init__(self):
+        pass
+
+    def init_output(self, pin):
+        pass
+
+    def set_output(self, pin, output):
+        pass
+
+    def close(self):
+        pass
+
+
 class Device(object):
     """A device that can be controlled by the GPIO pins on the Pi."""
-    def __init__(self, identifier, display_name, pin, scheduler):
+    def __init__(self, io, identifier, display_name, pin, scheduler):
+        self.io = io
         self.identifier = identifier
         self.display_name = display_name
         self.pin = pin
         self.scheduler = scheduler
+
+        io.init_output(self.pin)
 
         self.on = None
         self.turn_off()
@@ -67,7 +85,7 @@ class Device(object):
         if self.on == False:
             return
 
-        # TODO: Set pin HIGH
+        self.io.set_output(self.pin, 1)
         self.on = False
         logger.write_log("Turning OFF device %s (%d)" % (
             self.display_name, self.identifier))
@@ -77,7 +95,7 @@ class Device(object):
         if self.on == True:
             return
 
-        # TODO: Set pin LOW
+        self.io.set_output(self.pin, 0)
         self.on = True
         logger.write_log("Turning ON device %s (%d)" % (
             self.display_name, self.identifier))
@@ -156,10 +174,12 @@ except:
     sys.exit(0)
     
 try:
+    io = DeviceIODummy()
+
     devices = [
-        Device(101, "Front sprinklers", 0, FixedScheduler(14, 32, 211, 60)),
-        Device(201, "Back sprinklers bank A", 0, Scheduler()),
-        Device(202, "Back sprinklers bank B", 0, Scheduler())]
+        Device(io, 101, "Front sprinklers", 0, FixedScheduler(14, 32, 211, 60)),
+        Device(io, 201, "Back sprinklers bank A", 0, Scheduler()),
+        Device(io, 202, "Back sprinklers bank B", 0, Scheduler())]
 
     while True:
         next_poll = 60
@@ -175,5 +195,6 @@ except:
 finally:
     for device in devices:
         device.turn_off()
+    io.close()
     db.close()
     logger.close()
