@@ -86,7 +86,7 @@ class Device(object):
 
         self.io.set_output(self.pin, 1)
         self.on = False
-        logger.write_log("Turning OFF device %s (%d)" % (
+        logger.write_log("Turned OFF device %s (%d)" % (
             self.display_name, self.identifier))
         db.log_device_enabled(self.identifier, False)
 
@@ -109,7 +109,7 @@ class Device(object):
 
         self.io.set_output(self.pin, 0)
         self.on = True
-        logger.write_log("Turning ON device %s (%d)" % (
+        logger.write_log("Turned ON device %s (%d)" % (
             self.display_name, self.identifier))
         db.log_device_enabled(self.identifier, True)
 
