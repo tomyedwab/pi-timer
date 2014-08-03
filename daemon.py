@@ -35,7 +35,7 @@ if enable_rpio:
             GPIO.setmode(GPIO.BCM)
 
         def init_output(self, pin):
-            GPIO.setup(pin, GPIO.out)
+            GPIO.setup(pin, GPIO.OUT)
 
         def set_output(self, pin, output):
             logger.write_log("Setting pin %d to %d" % (pin, output))
@@ -281,6 +281,7 @@ class GoogleCalendarScheduler(FixedScheduler):
 
 # Main entry point
 logger = Logger()
+devices = None
 try:
     db = db.DB('/var/lib/pi-timer/db.sqlite', logger)
 except:
