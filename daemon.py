@@ -41,9 +41,13 @@ class DeviceIODummy(object):
 
 class Device(object):
     """A device that can be controlled by the GPIO pins on the Pi."""
-    def __init__(self, io, identifier, display_name, pin, scheduler):
+    # Only one device per group can be on at a time
+    group_locks = {}
+
+    def __init__(self, io, identifier, group, display_name, pin, scheduler):
         self.io = io
         self.identifier = identifier
+        self.group = group
         self.display_name = display_name
         self.pin = pin
         self.scheduler = scheduler
@@ -65,9 +69,22 @@ class Device(object):
             self.display_name, self.identifier))
         db.log_device_enabled(self.identifier, False)
 
+        if (self.group in Device.group_locks and
+                Device.group_locks[self.group] == self.identifier):
+            del Device.group_locks[self.group]
+
     def turn_on(self):
         if self.on == True:
             return
+
+        if (self.group in Device.group_locks and
+                Device.group_locks[self.group] != self.identifier):
+            # Some other device has the lock; defer
+            logger.write_log("Device %s (%d) waiting on %d for lock." % (
+                self.display_name, self.identifier, Device.group_locks[self.group]))
+            return
+
+        Device.group_locks[self.group] = self.identifier
 
         self.io.set_output(self.pin, 0)
         self.on = True
@@ -205,7 +222,7 @@ class GoogleCalendarScheduler(FixedScheduler):
                 event_id = event["id"]
                 device_id = int(event["summary"].split(":")[1])
                 logger.write_log("Syncing device %d" % device_id)
-                conn.request("GET", "/calendar/v3/calendars/%s/events/%s/instances?timeMin=%s-0700&timeMax=%s-0700&access_token=%s" % (
+                conn.request("GET", "/calendar/v3/calendars/%s/events/%s/instances?timeMin=%s-07:00&timeMax=%s-07:00&access_token=%s" % (
                     secrets.CALENDAR_ID, event_id, min_time.isoformat('T'), max_time.isoformat('T'), access_token))
                 res = json.loads(conn.getresponse().read())
 
@@ -254,9 +271,9 @@ try:
     io = DeviceIODummy()
 
     devices = [
-        Device(io, 101, "Front sprinklers", 0, GoogleCalendarScheduler(60, 1200)),
-        Device(io, 201, "Back sprinklers bank A", 0, Scheduler()),
-        Device(io, 202, "Back sprinklers bank B", 0, Scheduler())]
+        Device(io, 101, 1000, "Front sprinklers", 0, GoogleCalendarScheduler(60, 1200)),
+        Device(io, 201, 1000, "Back sprinklers bank A", 0, GoogleCalendarScheduler(60, 1200)),
+        Device(io, 202, 1000, "Back sprinklers bank B", 0, GoogleCalendarScheduler(60, 1200))]
 
     while True:
         next_poll = 60
@@ -270,8 +287,9 @@ try:
 except:
     logger.write_log("### Caught exception:\n%s" % traceback.format_exc())
 finally:
-    for device in devices:
-        device.turn_off()
+    if devices:
+        for device in devices:
+            device.turn_off()
     io.close()
     db.close()
     logger.close()
