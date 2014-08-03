@@ -289,7 +289,7 @@ except:
     sys.exit(0)
     
 try:
-    io = DeviceIO)
+    io = DeviceIO()
 
     devices = [
         Device(io, 101, 1000, "Front sprinklers", 18, GoogleCalendarScheduler(60, 1200)),
