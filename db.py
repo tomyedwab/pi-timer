@@ -13,6 +13,8 @@ class DB(object):
         c.execute('''CREATE TABLE IF NOT EXISTS device_schedule
                      (timestamp integer, device integer, hour integer,
                       minute integer, duration integer, min_duration integer)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS access_tokens
+                     (access_token string, refresh_token string)''')
         self.conn.commit()
 
         if self.logger:
@@ -46,9 +48,22 @@ class DB(object):
     def set_device_schedule(self, device, hour, minute, duration, min_duration):
         c = self.conn.cursor()
         c.execute(
-            '''INSERT INTO device_schedule VALUES (%d, %d, %d, %d, %d, %d)''' % (
-            int(time.time()), device, hour, minute, duration, min_duration))
+            '''INSERT INTO device_schedule VALUES (?, ?, ?, ?, ?, ?)''',
+            (int(time.time()), device, hour, minute, duration, min_duration))
         self.conn.commit()
+
+    def set_tokens(self, access_token, refresh_token):
+        c = self.conn.cursor()
+        c.execute("DELETE FROM access_tokens")
+        c.execute("INSERT INTO access_tokens VALUES (?, ?)",
+                (access_token, refresh_token))
+        self.conn.commit()
+
+    def get_tokens(self):
+        c = self.conn.cursor()
+        c.execute(
+            '''SELECT access_token, refresh_token FROM access_tokens''')
+        return c.fetchone()
 
     def close(self):
         self.conn.close()

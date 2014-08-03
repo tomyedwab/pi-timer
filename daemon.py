@@ -1,11 +1,14 @@
 #!/usr/bin/python
 
 import datetime
+import httplib
+import json
 import sys
 import time
 import traceback
 
 import db
+import secrets
 
 class Logger(object):
     def __init__(self):
@@ -108,8 +111,8 @@ class FixedScheduler(Scheduler):
         self.min_duration = min_duration
 
     def should_enable(self, device):
-        # Only look back 23 hours so we don't count yesterday's run
-        history = device.get_last_seconds(60*60*23)
+        # Only look back 12 hours so we don't count yesterday's run
+        history = device.get_last_seconds(60*60*12)
         start_time = None
         total_seconds = 0
         for row in history:
@@ -149,6 +152,95 @@ class DBScheduler(FixedScheduler):
         return super(DBScheduler, self).should_enable(device)
 
 
+class GoogleCalendarScheduler(FixedScheduler):
+    """Like FixedScheduler, but the schedule is stored in Google Calendar."""
+    def __init__(self, min_duration, max_duration):
+        self.hour = 0
+        self.minute = 0
+        self.duration = 0
+        self.min_duration = min_duration
+        self.max_duration = max_duration
+
+    last_update = 0
+    error_count = 0
+    schedules = {}
+
+    @staticmethod
+    def update_from_gc():
+        # Update from GC once an hour
+        if int(time.time()) - GoogleCalendarScheduler.last_update < 60*60:
+            return
+
+        logger.write_log("Syncing Google calendar")
+
+        (access_token, refresh_token) = db.get_tokens()
+
+        min_time = datetime.datetime.now() - datetime.timedelta(1)
+        max_time = datetime.datetime.now() + datetime.timedelta(1)
+        today = datetime.datetime.now()
+
+        conn = httplib.HTTPSConnection("www.googleapis.com")
+        conn.request("GET", "/calendar/v3/calendars/%s/events?access_token=%s" % (
+            secrets.CALENDAR_ID, access_token))
+        res = json.loads(conn.getresponse().read())
+        if "error" in res:
+            GoogleCalendarScheduler.error_count += 1
+            if GoogleCalendarScheduler.error_count > 3:
+                logger.write_log("### Too many errors in a row. Giving up.")
+                return
+
+            logger.write_log("### Error getting calendar, attempting to refresh token:\n%s" % res["error"]["message"])
+            conn = httplib.HTTPSConnection("accounts.google.com")
+            conn.request("POST", "/o/oauth2/token", "client_id=%s&client_secret=%s&refresh_token=%s&grant_type=refresh_token" % (
+                secrets.OAUTH_CLIENT_ID, secrets.OAUTH_SECRET, refresh_token),
+                {"Content-Type": "application/x-www-form-urlencoded"})
+            res = json.loads(conn.getresponse().read())
+            db.set_tokens(res["access_token"], refresh_token)
+            return
+
+        GoogleCalendarScheduler.error_count = 0
+
+        for event in res["items"]:
+            if event["summary"].split(":")[0] == "device":
+                event_id = event["id"]
+                device_id = int(event["summary"].split(":")[1])
+                logger.write_log("Syncing device %d" % device_id)
+                conn.request("GET", "/calendar/v3/calendars/%s/events/%s/instances?timeMin=%s-0700&timeMax=%s-0700&access_token=%s" % (
+                    secrets.CALENDAR_ID, event_id, min_time.isoformat('T'), max_time.isoformat('T'), access_token))
+                res = json.loads(conn.getresponse().read())
+
+                if device_id in GoogleCalendarScheduler.schedules:
+                    del GoogleCalendarScheduler.schedules[device_id]
+
+                for instance in res["items"]:
+                    start_time = datetime.datetime.strptime(instance["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
+                    end_time = datetime.datetime.strptime(instance["end"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
+                    if start_time.year == today.year and start_time.month == today.month and start_time.day == today.day:
+                        schedule = {
+                            "hour": start_time.hour,
+                            "minute": start_time.minute,
+                            "duration": (end_time-start_time).total_seconds()
+                        }
+                        logger.write_log("Device %d runs at %d:%02d for up to %d seconds" % (device_id, schedule["hour"], schedule["minute"], schedule["duration"]))
+                        GoogleCalendarScheduler.schedules[device_id] = schedule
+
+        GoogleCalendarScheduler.last_update = int(time.time())
+
+    def should_enable(self, device):
+        self.update_from_gc()
+        
+        if device.identifier in GoogleCalendarScheduler.schedules:
+            schedule = GoogleCalendarScheduler.schedules[device.identifier]
+            self.hour = schedule["hour"]
+            self.minute = schedule["minute"]
+            self.duration = schedule["duration"]
+            if self.duration > self.max_duration:
+                logger.write_log("ERROR! Duration of %d seconds exceeded maximum of %d! Clamping." % (self.duration, self.max_duration))
+                self.duration = self.max_duration
+
+        return super(GoogleCalendarScheduler, self).should_enable(device)
+
+
 # Main entry point
 logger = Logger()
 try:
@@ -162,7 +254,7 @@ try:
     io = DeviceIODummy()
 
     devices = [
-        Device(io, 101, "Front sprinklers", 0, DBScheduler()),
+        Device(io, 101, "Front sprinklers", 0, GoogleCalendarScheduler(60, 1200)),
         Device(io, 201, "Back sprinklers bank A", 0, Scheduler()),
         Device(io, 202, "Back sprinklers bank B", 0, Scheduler())]
 

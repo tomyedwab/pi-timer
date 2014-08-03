@@ -2,14 +2,17 @@
 
 import argparse
 import datetime
+import httplib
+import json
 import time
 
 import db
+import secrets
 
 db = db.DB('/var/lib/pi-timer/db.sqlite', None)
 
 parser = argparse.ArgumentParser(description='Query pi-timer database')
-parser.add_argument('action', choices=['history', 'schedule'])
+parser.add_argument('action', choices=['history', 'schedule', 'authenticate'])
 parser.add_argument('device', type=int)
 parser.add_argument('--setschedule', nargs=4, type=int)
 
@@ -39,3 +42,17 @@ if args.action == "schedule":
         print "Set on %s" % datetime.datetime.fromtimestamp(schedule[0])
     else:
         print "No schedule set for %d" % args.device
+
+if args.action == "authenticate":
+    print "Visit this URL to get a token:"
+    print "https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/calendar&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&client_id=%s" % secrets.OAUTH_CLIENT_ID
+    code = raw_input("Enter code: ")
+
+    conn = httplib.HTTPSConnection("accounts.google.com")
+    conn.request("POST", "/o/oauth2/token", "code=%s&client_id=%s&client_secret=%s&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code" % (
+        code, secrets.OAUTH_CLIENT_ID, secrets.OAUTH_SECRET),
+        {"Content-Type": "application/x-www-form-urlencoded"})
+    res = json.loads(conn.getresponse().read())
+    print "Token: %s" % res["access_token"]
+    print "Refresh: %s" % res["refresh_token"]
+    db.set_tokens(res["access_token"], res["refresh_token"])
