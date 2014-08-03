@@ -10,6 +10,8 @@ import traceback
 import db
 import secrets
 
+enable_rpio = True
+
 class Logger(object):
     def __init__(self):
         self.f = open('/var/log/pi-timer.log', 'a')
@@ -24,19 +26,38 @@ class Logger(object):
         self.f.close()
 
 
-class DeviceIODummy(object):
-    """Dummy IO controller."""
-    def __init__(self):
-        pass
+if enable_rpio:
+    import RPi.GPIO as GPIO
+    class DeviceIO(object):
+        """IO controller for Raspberry Pi."""
+        def __init__(self):
+            logger.write_log("Initializing GPIO.")
+            GPIO.setmode(GPIO.BCM)
 
-    def init_output(self, pin):
-        pass
+        def init_output(self, pin):
+            GPIO.setup(pin, GPIO.out)
 
-    def set_output(self, pin, output):
-        pass
+        def set_output(self, pin, output):
+            logger.write_log("Setting pin %d to %d" % (pin, output))
+            GPIO.output(pin, output)
 
-    def close(self):
-        pass
+        def close(self):
+            logger.write_log("Cleaning up GPIO.")
+            GPIO.cleanup()
+else:
+    class DeviceIO(object):
+        """Dummy IO controller."""
+        def __init__(self):
+            pass
+
+        def init_output(self, pin):
+            pass
+
+        def set_output(self, pin, output):
+            pass
+
+        def close(self):
+            pass
 
 
 class Device(object):
@@ -268,12 +289,12 @@ except:
     sys.exit(0)
     
 try:
-    io = DeviceIODummy()
+    io = DeviceIO)
 
     devices = [
-        Device(io, 101, 1000, "Front sprinklers", 0, GoogleCalendarScheduler(60, 1200)),
-        Device(io, 201, 1000, "Back sprinklers bank A", 0, GoogleCalendarScheduler(60, 1200)),
-        Device(io, 202, 1000, "Back sprinklers bank B", 0, GoogleCalendarScheduler(60, 1200))]
+        Device(io, 101, 1000, "Front sprinklers", 18, GoogleCalendarScheduler(60, 1200)),
+        Device(io, 201, 1000, "Back sprinklers bank A", 23, GoogleCalendarScheduler(60, 1200)),
+        Device(io, 202, 1000, "Back sprinklers bank B", 24, GoogleCalendarScheduler(60, 1200))]
 
     while True:
         next_poll = 60
