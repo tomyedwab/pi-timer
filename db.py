@@ -36,6 +36,13 @@ class DB(object):
             (device, from_timestamp))
         return list(rows)
 
+    def clear_device_history(self, device):
+        c = self.conn.cursor()
+        c.execute(
+            '''DELETE FROM device_history WHERE device = ?''',
+            (device,))
+        self.conn.commit()
+
     def get_device_schedule(self, device):
         c = self.conn.cursor()
         c.execute(
