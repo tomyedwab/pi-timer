@@ -3,12 +3,22 @@
 import datetime
 import httplib
 import json
+import signal
 import sys
 import time
 import traceback
 
 import db
 import secrets
+
+# Set a flag if a graceful exit is requested
+kill_signal = False
+def sigterm_handler(_signo, _stack_frame):
+    global kill_signal
+    kill_signal = True
+
+signal.signal(signal.SIGTERM, sigterm_handler)
+
 
 enable_rpio = True
 
@@ -304,7 +314,14 @@ try:
         for device in devices:
             next_poll = min(next_poll, device.update())
 
-        time.sleep(next_poll)
+        for i in xrange(0, next_poll):
+            time.sleep(1)
+            if kill_signal:
+                break
+
+        if kill_signal:
+            logger.write_log("### Caught TERM signal. Exiting.")
+            break
 
 except:
     logger.write_log("### Caught exception:\n%s" % traceback.format_exc())
