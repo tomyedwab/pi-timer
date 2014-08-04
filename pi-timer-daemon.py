@@ -160,36 +160,41 @@ class FixedScheduler(Scheduler):
     The device will not be turned on for less than min_duration seconds at a
     time.
     """
-    def __init__(self, hour, minute, duration, min_duration):
-        self.hour = hour
-        self.minute = minute
-        self.duration = duration
-        self.min_duration = min_duration
+    def __init__(self, schedule):
+        self.schedule = schedule
 
     def should_enable(self, device):
-        # Only look back 12 hours so we don't count yesterday's run
-        history = device.get_last_seconds(60*60*12)
-        start_time = None
-        total_seconds = 0
-        for row in history:
-            if row[1] == 1:
-                start_time = row[0]
-            elif row[1] == 0:
-                if start_time:
-                    total_seconds += row[0] - start_time
-                start_time = None
-        if start_time:
-            total_seconds += int(time.time()) - start_time
+        for item in self.schedule:
+            start_time = item["start_time"]
+            duration = item["duration"]
+            min_duration = item["min_duration"]
+            window = duration + 60*60
+            delta = (datetime.datetime.now() - start_time).total_seconds()
+            if delta < 0 or delta > window:
+                continue
 
-        now = datetime.datetime.now()
-        if (now.hour > self.hour or (
-            now.hour == self.hour and now.minute >= self.minute)):
-            if total_seconds < self.duration and (
-                device.on or (self.duration - total_seconds) > self.min_duration):
+            if duration < min_duration:
+                continue
+
+            history = device.get_last_seconds(window)
+            start_time = None
+            total_seconds = 0
+            for row in history:
+                if row[1] == 1:
+                    start_time = row[0]
+                elif row[1] == 0:
+                    if start_time:
+                        total_seconds += row[0] - start_time
+                    start_time = None
+            if start_time:
+                total_seconds += int(time.time()) - start_time
+
+            if total_seconds < duration and (
+                device.on or (duration - total_seconds) > min_duration):
                 if not device.on:
-                    logger.write_log("Device %d has been on %d sec. in last 24 hours." % (device.identifier, total_seconds))
-                    logger.write_log("Turning device on for %d sec." % (self.duration - total_seconds))
-                return (True, self.duration - total_seconds)
+                    logger.write_log("Device %d has been on %d sec. in last %d seconds." % (device.identifier, total_seconds, window))
+                    logger.write_log("Turning device on for %d sec." % (duration - total_seconds))
+                return (True, int(duration - total_seconds))
 
         return (False, 10000)
 
@@ -197,34 +202,36 @@ class FixedScheduler(Scheduler):
 class DBScheduler(FixedScheduler):
     """Works like FixedScheduler, except the schedule is stored in the DB."""
     def __init__(self):
-        self.hour = 0
-        self.minute = 0
-        self.duration = 0
-        self.min_duration = 0
+        self.schedule = []
 
     def should_enable(self, device):
-        (_, self.hour, self.minute, self.duration, self.min_duration) = (
+        schedule = (
             db.get_device_schedule(device.identifier))
+        self.schedule = [
+            {
+                "start_time": datetime.datetime.fromtimestamp(item[0]),
+                "duration": item[2],
+                "min_duration": item[3]
+            }
+            for item in schedule]
         return super(DBScheduler, self).should_enable(device)
 
 
 class GoogleCalendarScheduler(FixedScheduler):
     """Like FixedScheduler, but the schedule is stored in Google Calendar."""
     def __init__(self, min_duration, max_duration):
-        self.hour = 0
-        self.minute = 0
-        self.duration = 0
+        self.schedule = []
         self.min_duration = min_duration
         self.max_duration = max_duration
 
-    last_update = 0
     error_count = 0
     schedules = {}
 
     @staticmethod
     def update_from_gc():
         # Update from GC once an hour
-        if int(time.time()) - GoogleCalendarScheduler.last_update < 60*60:
+        last_update = int(db.get_global("gcupdatetime"))
+        if int(time.time()) - last_update < 60*60:
             return
 
         logger.write_log("Syncing Google calendar")
@@ -233,7 +240,6 @@ class GoogleCalendarScheduler(FixedScheduler):
 
         min_time = datetime.datetime.now() - datetime.timedelta(1)
         max_time = datetime.datetime.now() + datetime.timedelta(1)
-        today = datetime.datetime.now()
 
         conn = httplib.HTTPSConnection("www.googleapis.com")
         conn.request("GET", "/calendar/v3/calendars/%s/events?access_token=%s" % (
@@ -265,34 +271,35 @@ class GoogleCalendarScheduler(FixedScheduler):
                     secrets.CALENDAR_ID, event_id, min_time.isoformat('T'), max_time.isoformat('T'), access_token))
                 res = json.loads(conn.getresponse().read())
 
-                if device_id in GoogleCalendarScheduler.schedules:
-                    del GoogleCalendarScheduler.schedules[device_id]
+                GoogleCalendarScheduler.schedules[device_id] = []
 
                 for instance in res["items"]:
                     start_time = datetime.datetime.strptime(instance["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
                     end_time = datetime.datetime.strptime(instance["end"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
-                    if start_time.year == today.year and start_time.month == today.month and start_time.day == today.day:
-                        schedule = {
-                            "hour": start_time.hour,
-                            "minute": start_time.minute,
-                            "duration": (end_time-start_time).total_seconds()
-                        }
-                        logger.write_log("Device %d runs at %d:%02d for up to %d seconds" % (device_id, schedule["hour"], schedule["minute"], schedule["duration"]))
-                        GoogleCalendarScheduler.schedules[device_id] = schedule
+                    schedule = {
+                        "start_time": start_time,
+                        "duration": (end_time-start_time).total_seconds()
+                    }
+                    logger.write_log("Device %d runs at %s for up to %d seconds" % (device_id, schedule["start_time"], schedule["duration"]))
+                    GoogleCalendarScheduler.schedules[device_id].append(schedule)
 
-        GoogleCalendarScheduler.last_update = int(time.time())
+        db.set_global("gcupdatetime", str(int(time.time())))
 
     def should_enable(self, device):
         self.update_from_gc()
         
         if device.identifier in GoogleCalendarScheduler.schedules:
-            schedule = GoogleCalendarScheduler.schedules[device.identifier]
-            self.hour = schedule["hour"]
-            self.minute = schedule["minute"]
-            self.duration = schedule["duration"]
-            if self.duration > self.max_duration:
-                logger.write_log("ERROR! Duration of %d seconds exceeded maximum of %d! Clamping." % (self.duration, self.max_duration))
-                self.duration = self.max_duration
+            self.schedule = []
+            for item in GoogleCalendarScheduler.schedules[device.identifier]:
+                schedule_item = {
+                    "start_time": item["start_time"],
+                    "duration": item["duration"],
+                    "min_duration": self.min_duration
+                }
+                if schedule_item["duration"] > self.max_duration:
+                    logger.write_log("ERROR! Duration of %d seconds exceeded maximum of %d! Clamping." % (schedule_item["duration"], self.max_duration))
+                    schedule_item["duration"] = self.max_duration
+                self.schedule.append(schedule_item)
 
         return super(GoogleCalendarScheduler, self).should_enable(device)
 
@@ -308,6 +315,8 @@ except:
     sys.exit(0)
     
 try:
+    db.set_global("gcupdatetime", "0")
+
     io = DeviceIO()
 
     devices = [
@@ -322,9 +331,9 @@ try:
         for device in devices:
             next_poll = min(next_poll, device.update())
 
-        for i in xrange(0, next_poll*12):
-            # Sleep for 5 seconds at a time, up until it's time to poll again
-            time.sleep(1.0/12)
+        for i in xrange(0, next_poll):
+            # Sleep for 1 second at a time, up until it's time to poll again
+            time.sleep(1)
             keep_alive()
             if kill_signal:
                 break

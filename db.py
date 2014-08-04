@@ -1,3 +1,4 @@
+import datetime
 import sqlite3
 import time
 
@@ -11,10 +12,12 @@ class DB(object):
         c.execute('''CREATE TABLE IF NOT EXISTS device_history 
                      (timestamp integer, device integer, enabled integer)''')
         c.execute('''CREATE TABLE IF NOT EXISTS device_schedule
-                     (timestamp integer, device integer, hour integer,
-                      minute integer, duration integer, min_duration integer)''')
+                     (timestamp integer, device integer, start_time integer,
+                      duration integer, min_duration integer)''')
         c.execute('''CREATE TABLE IF NOT EXISTS access_tokens
                      (access_token string, refresh_token string)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS globals
+                     (name string, value string)''')
         self.conn.commit()
 
         if self.logger:
@@ -45,18 +48,25 @@ class DB(object):
 
     def get_device_schedule(self, device):
         c = self.conn.cursor()
-        c.execute(
-            '''SELECT timestamp, hour, minute, duration, min_duration FROM device_schedule
+        return [row for row in c.execute(
+            '''SELECT timestamp, start_time, duration, min_duration FROM device_schedule
                WHERE device = ?
                ORDER BY timestamp DESC''',
-            (device,))
-        return c.fetchone()
+            (device,))]
 
-    def set_device_schedule(self, device, hour, minute, duration, min_duration):
+    def set_device_schedule(self, device, start_time, duration, min_duration):
+        timestamp = (start_time - datetime.datetime(1970, 1, 2, 17)).total_seconds()
         c = self.conn.cursor()
         c.execute(
-            '''INSERT INTO device_schedule VALUES (?, ?, ?, ?, ?, ?)''',
-            (int(time.time()), device, hour, minute, duration, min_duration))
+            '''INSERT INTO device_schedule VALUES (?, ?, ?, ?, ?)''',
+            (int(time.time()), device, timestamp, duration, min_duration))
+        self.conn.commit()
+
+    def clear_device_schedule(self, device):
+        c = self.conn.cursor()
+        c.execute(
+            '''DELETE FROM device_schedule WHERE device = ?''',
+            (device,))
         self.conn.commit()
 
     def set_tokens(self, access_token, refresh_token):
@@ -71,6 +81,23 @@ class DB(object):
         c.execute(
             '''SELECT access_token, refresh_token FROM access_tokens''')
         return c.fetchone()
+
+    def get_global(self, name):
+        c = self.conn.cursor()
+        c.execute(
+            '''SELECT value FROM globals WHERE name = ?''',
+            (name,))
+        return c.fetchone()[0]
+
+    def set_global(self, name, value):
+        c = self.conn.cursor()
+        c.execute(
+            '''DELETE FROM globals WHERE name = ?''',
+            (name,))
+        c.execute(
+            '''INSERT INTO globals VALUES (?, ?)''',
+            (name,value))
+        self.conn.commit()
 
     def close(self):
         self.conn.close()

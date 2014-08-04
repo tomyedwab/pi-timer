@@ -12,9 +12,9 @@ import secrets
 db = db.DB('/var/lib/pi-timer/db.sqlite', None)
 
 parser = argparse.ArgumentParser(description='Query pi-timer database')
-parser.add_argument('action', choices=['history', 'clearhistory', 'schedule', 'authenticate'])
+parser.add_argument('action', choices=['history', 'clearhistory', 'schedule', 'clearschedule', 'authenticate', 'refreshgc'])
 parser.add_argument('device', type=int)
-parser.add_argument('--setschedule', nargs=4, type=int)
+parser.add_argument('--setschedule', nargs=4)
 
 args = parser.parse_args()
 
@@ -36,16 +36,25 @@ if args.action == "clearhistory":
 
 if args.action == "schedule":
     if args.setschedule:
-        db.set_device_schedule(args.device, *args.setschedule)
-    print args.setschedule
+        start_time = datetime.datetime.strptime(
+            "%s %s" % (args.setschedule[0], args.setschedule[1]),
+            "%Y-%m-%d %H:%M")
+        duration = int(args.setschedule[2])
+        min_duration = int(args.setschedule[3])
+        db.set_device_schedule(args.device, start_time, duration, min_duration)
     schedule = db.get_device_schedule(args.device)
     if schedule:
         print "Device schedule:"
-        print "Run at %d:%02d every day for up to %d seconds (min %d seconds)" % (
-                schedule[1], schedule[2], schedule[3], schedule[4])
-        print "Set on %s" % datetime.datetime.fromtimestamp(schedule[0])
+        for row in schedule:
+            print "Run at %s for up to %d seconds (min %d seconds)" % (
+                    datetime.datetime.fromtimestamp(row[1]), row[2], row[3])
+            print "Set on %s" % datetime.datetime.fromtimestamp(row[0])
     else:
         print "No schedule set for %d" % args.device
+
+if args.action == "clearschedule":
+    db.clear_device_schedule(args.device)
+    print "Cleared schedule."
 
 if args.action == "authenticate":
     print "Visit this URL to get a token:"
@@ -60,3 +69,8 @@ if args.action == "authenticate":
     print "Token: %s" % res["access_token"]
     print "Refresh: %s" % res["refresh_token"]
     db.set_tokens(res["access_token"], res["refresh_token"])
+
+if args.action == "refreshgc":
+    db.set_global("gcupdatetime", "0")
+    print "gcupdatetime global reset."
+
