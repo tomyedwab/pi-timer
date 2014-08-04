@@ -12,7 +12,7 @@ import secrets
 db = db.DB('/var/lib/pi-timer/db.sqlite', None)
 
 parser = argparse.ArgumentParser(description='Query pi-timer database')
-parser.add_argument('action', choices=['history', 'schedule', 'authenticate'])
+parser.add_argument('action', choices=['history', 'clearhistory', 'schedule', 'authenticate'])
 parser.add_argument('device', type=int)
 parser.add_argument('--setschedule', nargs=4, type=int)
 
@@ -29,6 +29,10 @@ if args.action == "history":
         elif row[1] == 0 and last_on_time:
             print "%s: Device turned OFF (%d seconds)" % (date_str, row[0] - last_on_time)
             last_on_time = None
+
+if args.action == "clearhistory":
+    db.clear_device_history(args.device)
+    print "Cleared history."
 
 if args.action == "schedule":
     if args.setschedule:
