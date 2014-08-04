@@ -54,6 +54,11 @@ if enable_rpio:
         def close(self):
             logger.write_log("Cleaning up GPIO.")
             GPIO.cleanup()
+
+    import watchdogdev
+    watchdog = watchdogdev.watchdog("/dev/watchdog")
+    def keep_alive():
+        watchdog.keep_alive()
 else:
     class DeviceIO(object):
         """Dummy IO controller."""
@@ -68,6 +73,9 @@ else:
 
         def close(self):
             pass
+
+    def keep_alive():
+        pass
 
 
 class Device(object):
@@ -314,8 +322,10 @@ try:
         for device in devices:
             next_poll = min(next_poll, device.update())
 
-        for i in xrange(0, next_poll):
-            time.sleep(1)
+        for i in xrange(0, next_poll*12):
+            # Sleep for 5 seconds at a time, up until it's time to poll again
+            time.sleep(1.0/12)
+            keep_alive()
             if kill_signal:
                 break
 
