@@ -58,7 +58,7 @@ app.get('/data', function(req, res) {
         });
 });
 
-app.listen(80);
+app.listen(80, "::");
 console.log("Listening on port 80");
 
 exports.app = app;
