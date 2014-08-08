@@ -284,7 +284,6 @@ class GoogleCalendarScheduler(FixedScheduler):
                         "start_time": start_time,
                         "duration": (end_time-start_time).total_seconds()
                     }
-                    schedule["start_time"] = datetime.datetime(2014, 8, 8, 1, 5, 0) # donotcheckin
                     logger.write_log("Device %d runs at %s for up to %d seconds" % (device_id, schedule["start_time"], schedule["duration"]))
                     GoogleCalendarScheduler.schedules[device_id].append(schedule)
                     db.set_device_schedule(device_id, schedule["start_time"], schedule["duration"], 0)
