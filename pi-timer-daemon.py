@@ -19,8 +19,11 @@ def sigterm_handler(_signo, _stack_frame):
 
 signal.signal(signal.SIGTERM, sigterm_handler)
 
-
-enable_rpio = True
+try:
+    import RPi.GPIO as GPIO
+    enable_rpio = True
+except ImportError:
+    enable_rpio = False
 
 class Logger(object):
     def __init__(self):
@@ -37,7 +40,6 @@ class Logger(object):
 
 
 if enable_rpio:
-    import RPi.GPIO as GPIO
     class DeviceIO(object):
         """IO controller for Raspberry Pi."""
         def __init__(self):
@@ -83,10 +85,11 @@ class Device(object):
     # Only one device per group can be on at a time
     group_locks = {}
 
-    def __init__(self, io, identifier, group, display_name, pin, scheduler):
+    def __init__(self, io, identifier, group, type, display_name, pin, scheduler):
         self.io = io
         self.identifier = identifier
         self.group = group
+        self.type = type
         self.display_name = display_name
         self.pin = pin
         self.scheduler = scheduler
@@ -272,6 +275,7 @@ class GoogleCalendarScheduler(FixedScheduler):
                 res = json.loads(conn.getresponse().read())
 
                 GoogleCalendarScheduler.schedules[device_id] = []
+                db.clear_device_schedule(device_id)
 
                 for instance in res["items"]:
                     start_time = datetime.datetime.strptime(instance["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
@@ -280,8 +284,10 @@ class GoogleCalendarScheduler(FixedScheduler):
                         "start_time": start_time,
                         "duration": (end_time-start_time).total_seconds()
                     }
+                    schedule["start_time"] = datetime.datetime(2014, 8, 8, 1, 5, 0) # donotcheckin
                     logger.write_log("Device %d runs at %s for up to %d seconds" % (device_id, schedule["start_time"], schedule["duration"]))
                     GoogleCalendarScheduler.schedules[device_id].append(schedule)
+                    db.set_device_schedule(device_id, schedule["start_time"], schedule["duration"], 0)
 
         db.set_global("gcupdatetime", str(int(time.time())))
 
@@ -324,7 +330,7 @@ try:
         for device in db.list_devices():
             if device[0] not in devices:
                 devices[device[0]] = (
-                    Device(io, device[0], device[1], device[2], device[3],
+                    Device(io, device[0], device[1], device[2], device[3], device[4],
                         GoogleCalendarScheduler(60, 1200)))
 
         next_poll = 60

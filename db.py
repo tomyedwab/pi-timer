@@ -10,7 +10,7 @@ class DB(object):
         
         c = self.conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS devices 
-                     (device_id integer, group_id integer, display_name string, pin integer)''')
+                     (device_id integer, group_id integer, type string, display_name string, pin integer)''')
         c.execute('''CREATE TABLE IF NOT EXISTS device_history 
                      (timestamp integer, device integer, enabled integer)''')
         c.execute('''CREATE TABLE IF NOT EXISTS device_schedule
@@ -35,13 +35,13 @@ class DB(object):
     def list_devices(self):
         c = self.conn.cursor()
         rows = c.execute(
-            '''SELECT device_id, group_id, display_name, pin FROM devices''')
+            '''SELECT device_id, group_id, type, display_name, pin FROM devices''')
         return list(rows)
 
-    def add_device(self, device_id, group, display_name, pin):
+    def add_device(self, device_id, group, type, display_name, pin):
         c = self.conn.cursor()
-        c.execute("INSERT INTO devices VALUES (?, ?, ?, ?)", (
-            device_id, group, display_name, pin))
+        c.execute("INSERT INTO devices VALUES (?, ?, ?, ?, ?)", (
+            device_id, group, type, display_name, pin))
         self.conn.commit()
 
     def get_device_history(self, device, from_timestamp):
@@ -69,7 +69,7 @@ class DB(object):
             (device,))]
 
     def set_device_schedule(self, device, start_time, duration, min_duration):
-        timestamp = (start_time - datetime.datetime(1970, 1, 2, 17)).total_seconds()
+        timestamp = (start_time - datetime.datetime(1970, 1, 1)).total_seconds() + (7*60*60)
         c = self.conn.cursor()
         c.execute(
             '''INSERT INTO device_schedule VALUES (?, ?, ?, ?, ?)''',
