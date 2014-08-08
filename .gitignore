@@ -1,1 +1,4 @@
 secrets.py
+server/.module-cache
+server/js/.module-cache
+server/node_modules
