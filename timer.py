@@ -12,11 +12,22 @@ import secrets
 db = db.DB('/var/lib/pi-timer/db.sqlite', None)
 
 parser = argparse.ArgumentParser(description='Query pi-timer database')
-parser.add_argument('action', choices=['history', 'clearhistory', 'schedule', 'clearschedule', 'authenticate', 'refreshgc'])
+parser.add_argument('action', choices=['devices', 'history', 'clearhistory', 'schedule', 'clearschedule', 'authenticate', 'refreshgc'])
 parser.add_argument('device', type=int)
 parser.add_argument('--setschedule', nargs=4)
+parser.add_argument('--add', nargs=4)
 
 args = parser.parse_args()
+
+if args.action == "devices":
+    if args.add:
+        db.add_device(int(args.add[0]), int(args.add[1]), args.add[2], int(args.add[3]))
+        
+    devices = db.list_devices()
+    print "Devices:"
+    for device in devices:
+        print "Device %d: %s (group %d; pin %d)" % (
+            device[0], device[2], device[1], device[3])
 
 if args.action == "history":
     history = db.get_device_history(args.device, int(time.time()) - (24*60*60))

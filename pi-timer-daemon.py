@@ -306,7 +306,7 @@ class GoogleCalendarScheduler(FixedScheduler):
 
 # Main entry point
 logger = Logger()
-devices = None
+devices = {}
 try:
     db = db.DB('/var/lib/pi-timer/db.sqlite', logger)
 except:
@@ -319,16 +319,18 @@ try:
 
     io = DeviceIO()
 
-    devices = [
-        Device(io, 101, 1000, "Front sprinklers", 18, GoogleCalendarScheduler(60, 1200)),
-        Device(io, 201, 1000, "Back sprinklers bank A", 23, GoogleCalendarScheduler(60, 1200)),
-        Device(io, 202, 1000, "Back sprinklers bank B", 24, GoogleCalendarScheduler(60, 1200))]
-
     while True:
+        # Fetch devices
+        for device in db.list_devices():
+            if device[0] not in devices:
+                devices[device[0]] = (
+                    Device(io, device[0], device[1], device[2], device[3],
+                        GoogleCalendarScheduler(60, 1200)))
+
         next_poll = 60
         # Update each device's schedule once per minute unless a device needs
         # a shorter update
-        for device in devices:
+        for device in devices.itervalues():
             next_poll = min(next_poll, device.update())
 
         for i in xrange(0, next_poll):
@@ -345,9 +347,8 @@ try:
 except:
     logger.write_log("### Caught exception:\n%s" % traceback.format_exc())
 finally:
-    if devices:
-        for device in devices:
-            device.turn_off()
+    for device in devices.itervalues():
+        device.turn_off()
     io.close()
     db.close()
     logger.close()

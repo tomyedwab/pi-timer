@@ -9,6 +9,8 @@ class DB(object):
         self.logger = logger
         
         c = self.conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS devices 
+                     (device_id integer, group_id integer, display_name string, pin integer)''')
         c.execute('''CREATE TABLE IF NOT EXISTS device_history 
                      (timestamp integer, device integer, enabled integer)''')
         c.execute('''CREATE TABLE IF NOT EXISTS device_schedule
@@ -26,8 +28,20 @@ class DB(object):
     def log_device_enabled(self, device, enabled):
         timestamp = int(time.time())
         c = self.conn.cursor()
-        c.execute("INSERT INTO device_history VALUES (%d, %d, %d)" % (
+        c.execute("INSERT INTO device_history VALUES (?, ?, ?)", (
             timestamp, device, 1 if enabled else 0))
+        self.conn.commit()
+
+    def list_devices(self):
+        c = self.conn.cursor()
+        rows = c.execute(
+            '''SELECT device_id, group_id, display_name, pin FROM devices''')
+        return list(rows)
+
+    def add_device(self, device_id, group, display_name, pin):
+        c = self.conn.cursor()
+        c.execute("INSERT INTO devices VALUES (?, ?, ?, ?)", (
+            device_id, group, display_name, pin))
         self.conn.commit()
 
     def get_device_history(self, device, from_timestamp):
