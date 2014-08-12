@@ -265,6 +265,12 @@ class GoogleCalendarScheduler(FixedScheduler):
 
         GoogleCalendarScheduler.error_count = 0
 
+        # Clear all schedules
+        for device_id in GoogleCalendarScheduler.schedules.keys():
+            db.clear_device_schedule(device_id)
+
+        GoogleCalendarScheduler.schedules = {}
+
         for event in res["items"]:
             if event["summary"].split(":")[0] == "device":
                 event_id = event["id"]
@@ -274,8 +280,6 @@ class GoogleCalendarScheduler(FixedScheduler):
                     secrets.CALENDAR_ID, event_id, min_time.isoformat('T'), max_time.isoformat('T'), access_token))
                 res = json.loads(conn.getresponse().read())
 
-                GoogleCalendarScheduler.schedules[device_id] = []
-                db.clear_device_schedule(device_id)
 
                 for instance in res["items"]:
                     start_time = datetime.datetime.strptime(instance["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
