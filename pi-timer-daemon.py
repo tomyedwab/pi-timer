@@ -289,6 +289,7 @@ class GoogleCalendarScheduler(FixedScheduler):
                         "duration": (end_time-start_time).total_seconds()
                     }
                     logger.write_log("Device %d runs at %s for up to %d seconds" % (device_id, schedule["start_time"], schedule["duration"]))
+                    GoogleCalendarScheduler.schedules.setdefault(device_id, [])
                     GoogleCalendarScheduler.schedules[device_id].append(schedule)
                     db.set_device_schedule(device_id, schedule["start_time"], schedule["duration"], 0)
 
