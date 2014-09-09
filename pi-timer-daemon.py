@@ -19,6 +19,18 @@ def sigterm_handler(_signo, _stack_frame):
 
 signal.signal(signal.SIGTERM, sigterm_handler)
 
+def send_email(subject, body):
+    header  = 'From: %s\n' % secrets.FROM_ADDRESS
+    header += 'To: %s\n' % secrets.EMAIL_ADDRESS
+    header += 'Subject: %s\n\n' % subject
+    message = header + body
+
+    import smtplib
+    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server.starttls()
+    server.login(secrets.EMAIL_ADDRESS, secrets.EMAIL_PASSWORD)
+    server.sendmail(secrets.FROM_ADDRESS, secrets.EMAIL_ADDRESS, message)
+
 try:
     import RPi.GPIO as GPIO
     enable_rpio = True
@@ -379,8 +391,10 @@ try:
             break
 
 except:
-    # Record the error somewhere useful!
-    logger.write_log("### Caught exception:\n%s" % traceback.format_exc())
+    error_str = traceback.format_exc()
+    send_email("pi-timer critical error",
+            "Pi Timer has encountered an error:\n%s" % error_str)
+    logger.write_log("### Caught exception:\n%s" % error_str)
 finally:
     for device in devices.itervalues():
         device.turn_off()
