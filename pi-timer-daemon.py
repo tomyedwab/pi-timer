@@ -293,7 +293,9 @@ class GoogleCalendarScheduler(FixedScheduler):
         GoogleCalendarScheduler.schedules = {}
 
         for event in res["items"]:
-            if event["summary"].split(":")[0] == "device":
+            if event.get("status", "") == "cancelled:":
+                continue
+            if event.get("summary", ":").split(":")[0] == "device":
                 event_id = event["id"]
                 device_id = int(event["summary"].split(":")[1])
                 logger.write_log("Syncing device %d" % device_id)
