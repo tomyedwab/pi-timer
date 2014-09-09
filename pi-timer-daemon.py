@@ -392,9 +392,10 @@ try:
 
 except:
     error_str = traceback.format_exc()
-    send_email("pi-timer critical error",
-            "Pi Timer has encountered an error:\n%s" % error_str)
     logger.write_log("### Caught exception:\n%s" % error_str)
+    if "KeyboardInterrupt" not in error_str:
+        send_email("pi-timer critical error",
+                "Pi Timer has encountered an error:\n%s" % error_str)
 finally:
     for device in devices.itervalues():
         device.turn_off()
