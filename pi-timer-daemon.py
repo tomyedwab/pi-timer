@@ -73,6 +73,9 @@ if enable_rpio:
     def keep_alive():
         global watchdog
         watchdog.keep_alive()
+
+    def close_watchdog():
+        watchdog.magic_close()
 else:
     class DeviceIO(object):
         """Dummy IO controller."""
@@ -92,6 +95,9 @@ else:
         pass
 
     def keep_alive():
+        pass
+
+    def close_watchdog():
         pass
 
 
@@ -371,6 +377,7 @@ try:
             break
 
 except:
+    # Record the error somewhere useful!
     logger.write_log("### Caught exception:\n%s" % traceback.format_exc())
 finally:
     for device in devices.itervalues():
@@ -378,3 +385,4 @@ finally:
     io.close()
     db.close()
     logger.close()
+    close_watchdog()
