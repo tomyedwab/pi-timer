@@ -58,8 +58,20 @@ if enable_rpio:
             GPIO.cleanup()
 
     import watchdogdev
-    watchdog = watchdogdev.watchdog("/dev/watchdog")
+    watchdog = None
+
+    def init_watchdog():
+        global watchdog
+        # Wait for a full minute, since this is a startup task and if there
+        # is a bug we can get into a watchdog shutdown loop
+        logger.write_log("Waiting for 60 seconds...")
+        time.sleep(60)
+
+        logger.write_log("Enabling watchdog!")
+        watchdog = watchdogdev.watchdog("/dev/watchdog")
+
     def keep_alive():
+        global watchdog
         watchdog.keep_alive()
 else:
     class DeviceIO(object):
@@ -75,6 +87,9 @@ else:
 
         def close(self):
             pass
+
+    def init_watchdog():
+        pass
 
     def keep_alive():
         pass
@@ -327,6 +342,7 @@ except:
 try:
     db.set_global("gcupdatetime", "0")
 
+    init_watchdog()
     io = DeviceIO()
 
     while True:
