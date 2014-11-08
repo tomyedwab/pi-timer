@@ -284,15 +284,19 @@ class GoogleCalendarScheduler(FixedScheduler):
         if "error" in res:
             GoogleCalendarScheduler.error_count += 1
             if GoogleCalendarScheduler.error_count > 3:
-                logger.write_log("### Too many errors in a row. Giving up.")
-                return
+                # Send an email and shut down.
+                raise Exception("Failed to load calendar 3 times in a row. Giving up.")
 
             logger.write_log("### Error getting calendar, attempting to refresh token:\n%s" % res["error"]["message"])
             conn = httplib.HTTPSConnection("accounts.google.com")
             conn.request("POST", "/o/oauth2/token", "client_id=%s&client_secret=%s&refresh_token=%s&grant_type=refresh_token" % (
                 secrets.OAUTH_CLIENT_ID, secrets.OAUTH_SECRET, refresh_token),
                 {"Content-Type": "application/x-www-form-urlencoded"})
-            res = json.loads(conn.getresponse().read())
+            try:
+                res = json.loads(conn.getresponse().read())
+            except Exception, e:
+                logger.write_log("### Error parsing response: %s. Trying again..." % e)
+                return
             db.set_tokens(res["access_token"], refresh_token)
             return
 
