@@ -308,7 +308,7 @@ class GoogleCalendarScheduler(FixedScheduler):
 
         GoogleCalendarScheduler.schedules = {}
 
-        for event in res["items"]:
+        for event in res.get("items", []):
             if event.get("status", "") == "cancelled:":
                 continue
             if event.get("summary", ":").split(":")[0] == "device":
@@ -320,7 +320,7 @@ class GoogleCalendarScheduler(FixedScheduler):
                 res = json.loads(conn.getresponse().read())
 
 
-                for instance in res["items"]:
+                for instance in res.get("items", []):
                     start_time = datetime.datetime.strptime(instance["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
                     end_time = datetime.datetime.strptime(instance["end"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S")
                     schedule = {
