@@ -145,7 +145,7 @@ var PiTimerView = React.createClass({displayName: 'PiTimerView',
                 if (runStart !== null) {
                     nextRunView = React.DOM.span({style: styles.currentlyRunning}, "Device is currently running. (Started ", runStart.toLocaleTimeString(), ")");
                 } else if (nextRun) {
-                    nextRunView = React.DOM.span(null, nextRun.start_time.toLocaleString(), " for ", nextRun.duration/1000, " seconds.");
+                    nextRunView = React.DOM.span(null, nextRun.start_time.toLocaleString(), " for ", nextRun.duration, " seconds.");
                 }
                 return React.DOM.div({style: styles.deviceCard}, 
                     React.DOM.div({style: styles.iconWrapper}, 
